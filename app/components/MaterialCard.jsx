@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Linking, Platform } from 'react-native';
 import React from 'react';
 import Colors from '../../constant/Colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,13 +9,37 @@ export default function MaterialCard({ material, onPress }) {
 
     const handleMaterialPress = async (material) => {
         try {
-            // Open the file URL
-            if (material.fileUrl) {
+            if (!material.fileUrl) {
+                Alert.alert('Error', 'No file link available');
+                return;
+            }
+
+            // Check if user is on mobile
+            const isMobile = Platform.OS !== 'web';
+            
+            // Handle Google Drive links
+            if (material.source === 'google_drive') {
+                if (isMobile) {
+                    // Try to open in Google Drive app first
+                    const canOpen = await Linking.canOpenURL('googledrive://');
+                    if (canOpen) {
+                        await Linking.openURL(material.fileUrl.replace('https://', 'googledrive://'));
+                        return;
+                    }
+                }
+                
+                // Fallback to browser
+                await Linking.openURL(material.fileUrl);
+            } else {
+                // Handle other links
                 await Linking.openURL(material.fileUrl);
             }
         } catch (error) {
-            console.error('Error opening material:', error);
-            Alert.alert('Error', 'Failed to open material');
+            console.error('Error opening link:', error);
+            Alert.alert(
+                'Error', 
+                'Failed to open link. Make sure you have Google Drive installed or try opening in browser.'
+            );
         }
     };
 

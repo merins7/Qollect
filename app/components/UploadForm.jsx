@@ -1,13 +1,20 @@
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
+import { 
+    View, Text, StyleSheet, TouchableOpacity, TextInput, Modal, 
+    Alert, ActivityIndicator, Platform 
+} from 'react-native';
 import React, { useState, useEffect } from 'react';
 import { Picker } from '@react-native-picker/picker';
-import * as DocumentPicker from 'expo-document-picker';
 import Colors from '../../constant/Colors';
-import { doc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, auth } from '../../config/firebaseConfig';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../config/firebaseConfig';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { IT_SUBJECTS } from '../../config/subjectsData';
+
+const SCHEMES = [
+    { label: 'Scheme 2019', value: '2019' },
+    { label: 'Scheme 2023', value: '2023' }
+];
 
 const SEMESTERS = Array.from({ length: 8 }, (_, i) => ({
     label: `Semester ${i + 1}`,
@@ -22,274 +29,145 @@ const MATERIAL_TYPES = [
 
 export default function UploadForm({ visible, onClose }) {
     const { isDarkMode } = useTheme();
-    const [file, setFile] = useState(null);
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [uploading, setUploading] = useState(false);
+    const { user, userProfile, isAuthenticated } = useAuth();
+
+    const [scheme, setScheme] = useState('');
     const [semester, setSemester] = useState('');
     const [subject, setSubject] = useState('');
     const [materialType, setMaterialType] = useState('');
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [googleDriveLink, setGoogleDriveLink] = useState('');
+    const [uploading, setUploading] = useState(false);
     const [availableSubjects, setAvailableSubjects] = useState([]);
 
+    // Fetch subjects based on scheme & semester
     useEffect(() => {
-        if (semester) {
-            const subjects = IT_SUBJECTS[semester] || [];
+        if (scheme && semester) {
+            const subjects = IT_SUBJECTS[scheme]?.[semester] || [];
             setAvailableSubjects(subjects);
-            setSubject(''); // Reset subject when semester changes
+            setSubject('');
         }
-    }, [semester]);
+    }, [scheme, semester]);
 
-    const pickDocument = async () => {
-        try {
-            const result = await DocumentPicker.getDocumentAsync({
-                type: ['application/pdf'],
-                copyToCacheDirectory: true
-            });
+    const resetForm = () => {
+        setScheme('');
+        setSemester('');
+        setSubject('');
+        setMaterialType('');
+        setTitle('');
+        setDescription('');
+        setGoogleDriveLink('');
+    };
 
-            if (!result.canceled && result.assets && result.assets[0]) {
-                setFile(result.assets[0]);
-            }
-        } catch (error) {
-            console.error('Error picking document:', error);
-            Alert.alert('Error', 'Failed to pick document');
-        }
+    const validateGoogleDriveLink = (link) => {
+        // Check if the link is a valid Google Drive link
+        const googleDriveRegex = /^https:\/\/drive\.google\.com\/(file\/d\/|open\?id=|uc\?id=)/;
+        return googleDriveRegex.test(link);
     };
 
     const handleUpload = async () => {
-        if (!file || !title || !semester || !subject || !materialType) {
-            Alert.alert('Error', 'Please fill in all fields and select a file');
+        if (!isAuthenticated || !user) {
+            Alert.alert('Authentication Required', 'Please sign in to upload materials');
+            onClose();
             return;
+        }
+
+        // Validation checks
+        const validations = [
+            { condition: !scheme, message: 'Please select a scheme' },
+            { condition: !semester, message: 'Please select a semester' },
+            { condition: !subject, message: 'Please select a subject' },
+            { condition: !materialType, message: 'Please select a material type' },
+            { condition: !title.trim(), message: 'Please enter a title' },
+            { condition: !googleDriveLink.trim(), message: 'Please enter a Google Drive share link' },
+            { condition: !validateGoogleDriveLink(googleDriveLink.trim()), message: 'Please enter a valid Google Drive link' }
+        ];
+
+        for (const validation of validations) {
+            if (validation.condition) {
+                Alert.alert('Invalid Input', validation.message);
+                return;
+            }
         }
 
         try {
             setUploading(true);
 
-            // Create a unique filename to avoid conflicts
-            const timestamp = Date.now();
-            const fileExtension = file.name.split('.').pop();
-            const uniqueFileName = `${timestamp}.${fileExtension}`;
-            const storagePath = `materials/${semester}/${subject}/${uniqueFileName}`;
-
-            // 1. Upload file to Firebase Storage
-            const fileRef = ref(storage, storagePath);
-            
-            // Convert URI to blob
-            const response = await fetch(file.uri);
-            if (!response.ok) {
-                throw new Error('Failed to fetch file');
-            }
-            
-            const blob = await response.blob();
-            if (!blob) {
-                throw new Error('Failed to create blob');
-            }
-
-            // Upload blob to Firebase Storage
-            try {
-                await uploadBytes(fileRef, blob);
-                console.log('File uploaded successfully');
-            } catch (uploadError) {
-                console.error('Upload error details:', uploadError);
-                throw new Error(`Upload failed: ${uploadError.message}`);
-            }
-
-            // Get download URL
-            let downloadURL;
-            try {
-                downloadURL = await getDownloadURL(fileRef);
-                console.log('Download URL obtained:', downloadURL);
-            } catch (urlError) {
-                console.error('Get URL error:', urlError);
-                throw new Error('Failed to get download URL');
-            }
-
-            // 2. Add document to Firestore
-            const materialRef = collection(db, 'materials');
-            await addDoc(materialRef, {
-                title,
-                description,
+            // Create Firestore entry
+            const materialData = {
+                title: title.trim(),
+                description: description.trim() || '',
                 type: materialType,
-                fileUrl: downloadURL,
-                fileName: file.name,
-                fileSize: file.size,
-                uploadedBy: auth.currentUser.email,
-                uploadedAt: serverTimestamp(),
-                semester: semester,
+                scheme,
+                semester: semester.toString(),
                 subjectId: subject,
-                storagePath: storagePath
-            });
+                fileUrl: googleDriveLink.trim(),
+                uploadedBy: user.uid,
+                uploaderEmail: user.email,
+                uploaderName: userProfile?.displayName || user.email,
+                status: 'pending',
+                createdAt: serverTimestamp(),
+                lastUpdated: serverTimestamp(),
+                source: 'google_drive',
+                metadata: {
+                    platform: Platform.OS,
+                    timestamp: new Date().toISOString()
+                }
+            };
 
-            Alert.alert('Success', 'Material uploaded successfully');
+            await addDoc(collection(db, 'materialRequests'), materialData);
+
+            Alert.alert('Success', 'Your material has been submitted for approval.');
             resetForm();
             onClose();
         } catch (error) {
             console.error('Upload error:', error);
-            Alert.alert(
-                'Error',
-                'Failed to upload material: ' + (error.message || 'Unknown error')
-            );
+            Alert.alert('Upload Failed', 'There was a problem submitting your material.');
         } finally {
             setUploading(false);
         }
     };
 
-    const resetForm = () => {
-        setFile(null);
-        setTitle('');
-        setDescription('');
-        setSemester('');
-        setSubject('');
-        setMaterialType('');
-    };
-
     return (
-        <Modal
-            visible={visible}
-            animationType="slide"
-            transparent={true}
-            onRequestClose={onClose}
-        >
-            <View style={[
-                styles.modalContainer,
-                isDarkMode && styles.modalContainerDark
-            ]}>
-                <View style={[
-                    styles.modalContent,
-                    isDarkMode && styles.modalContentDark
-                ]}>
-                    <Text style={[
-                        styles.title,
-                        isDarkMode && styles.titleDark
-                    ]}>Upload Material</Text>
+        <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+            <View style={[styles.modalContainer, isDarkMode && styles.modalContainerDark]}>
+                <View style={[styles.modalContent, isDarkMode && styles.modalContentDark]}>
+                    <Text style={[styles.title, isDarkMode && styles.titleDark]}>Upload Material</Text>
 
-                    <View style={[
-                        styles.pickerContainer,
-                        isDarkMode && styles.pickerContainerDark
-                    ]}>
-                        <Picker
-                            selectedValue={semester}
-                            onValueChange={setSemester}
-                            style={[styles.picker, isDarkMode && styles.pickerDark]}
-                        >
-                            <Picker.Item label="Select Semester" value="" />
-                            {SEMESTERS.map(sem => (
-                                <Picker.Item 
-                                    key={sem.value} 
-                                    label={sem.label} 
-                                    value={sem.value}
-                                />
-                            ))}
-                        </Picker>
-                    </View>
+                    {/* Scheme Selector */}
+                    <Picker selectedValue={scheme} onValueChange={setScheme} style={styles.picker}>
+                        <Picker.Item label="Select Scheme" value="" />
+                        {SCHEMES.map(({ label, value }) => <Picker.Item key={value} label={label} value={value} />)}
+                    </Picker>
 
-                    <View style={[
-                        styles.pickerContainer,
-                        isDarkMode && styles.pickerContainerDark
-                    ]}>
-                        <Picker
-                            selectedValue={subject}
-                            onValueChange={setSubject}
-                            style={[styles.picker, isDarkMode && styles.pickerDark]}
-                            enabled={semester !== ''}
-                        >
-                            <Picker.Item label="Select Subject" value="" />
-                            {availableSubjects.map(sub => (
-                                <Picker.Item 
-                                    key={sub.id} 
-                                    label={sub.name} 
-                                    value={sub.id}
-                                />
-                            ))}
-                        </Picker>
-                    </View>
+                    {/* Semester Selector */}
+                    <Picker selectedValue={semester} onValueChange={setSemester} style={styles.picker}>
+                        <Picker.Item label="Select Semester" value="" />
+                        {SEMESTERS.map(({ label, value }) => <Picker.Item key={value} label={label} value={value} />)}
+                    </Picker>
 
-                    <View style={[
-                        styles.pickerContainer,
-                        isDarkMode && styles.pickerContainerDark
-                    ]}>
-                        <Picker
-                            selectedValue={materialType}
-                            onValueChange={setMaterialType}
-                            style={[styles.picker, isDarkMode && styles.pickerDark]}
-                        >
-                            <Picker.Item label="Select Material Type" value="" />
-                            {MATERIAL_TYPES.map(type => (
-                                <Picker.Item 
-                                    key={type.value} 
-                                    label={type.label} 
-                                    value={type.value}
-                                />
-                            ))}
-                        </Picker>
-                    </View>
+                    {/* Subject Selector */}
+                    <Picker selectedValue={subject} onValueChange={setSubject} style={styles.picker} enabled={semester !== ''}>
+                        <Picker.Item label="Select Subject" value="" />
+                        {availableSubjects.map(({ id, name }) => <Picker.Item key={id} label={name} value={id} />)}
+                    </Picker>
 
-                    <TextInput
-                        style={[
-                            styles.input,
-                            isDarkMode && styles.inputDark
-                        ]}
-                        placeholder="Title"
-                        placeholderTextColor={isDarkMode ? '#999' : '#666'}
-                        value={title}
-                        onChangeText={setTitle}
-                    />
+                    {/* Material Type Selector */}
+                    <Picker selectedValue={materialType} onValueChange={setMaterialType} style={styles.picker}>
+                        <Picker.Item label="Select Material Type" value="" />
+                        {MATERIAL_TYPES.map(({ label, value }) => <Picker.Item key={value} label={label} value={value} />)}
+                    </Picker>
 
-                    <TextInput
-                        style={[
-                            styles.input,
-                            styles.descriptionInput,
-                            isDarkMode && styles.inputDark
-                        ]}
-                        placeholder="Description (optional)"
-                        placeholderTextColor={isDarkMode ? '#999' : '#666'}
-                        value={description}
-                        onChangeText={setDescription}
-                        multiline
-                    />
+                    <TextInput style={styles.input} placeholder="Title" value={title} onChangeText={setTitle} />
+                    <TextInput style={styles.input} placeholder="Description (optional)" value={description} onChangeText={setDescription} multiline />
+                    <TextInput style={styles.input} placeholder="Google Drive Link *" value={googleDriveLink} onChangeText={setGoogleDriveLink} />
 
-                    <TouchableOpacity
-                        style={styles.fileButton}
-                        onPress={pickDocument}
-                    >
-                        <Text style={styles.fileButtonText}>
-                            {file ? file.name : 'Select PDF File'}
-                        </Text>
+                    <TouchableOpacity style={styles.uploadButton} onPress={handleUpload} disabled={uploading}>
+                        <Text style={styles.buttonText}>{uploading ? 'Uploading...' : 'Submit'}</Text>
                     </TouchableOpacity>
 
-                    <View style={styles.buttonContainer}>
-                        <TouchableOpacity
-                            style={[styles.button, styles.cancelButton]}
-                            onPress={() => {
-                                resetForm();
-                                onClose();
-                            }}
-                            disabled={uploading}
-                        >
-                            <Text style={styles.buttonText}>Cancel</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.button,
-                                styles.uploadButton,
-                                uploading && styles.disabledButton
-                            ]}
-                            onPress={handleUpload}
-                            disabled={uploading}
-                        >
-                            <Text style={styles.buttonText}>
-                                {uploading ? 'Uploading...' : 'Upload'}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {uploading && (
-                        <ActivityIndicator 
-                            size="large" 
-                            color={Colors.PRIMARY} 
-                            style={styles.loader} 
-                        />
-                    )}
+                    {uploading && <ActivityIndicator size="large" color={Colors.PRIMARY} style={styles.loader} />}
                 </View>
             </View>
         </Modal>
@@ -297,100 +175,10 @@ export default function UploadForm({ visible, onClose }) {
 }
 
 const styles = StyleSheet.create({
-    modalContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-    },
-    modalContent: {
-        width: '90%',
-        backgroundColor: Colors.white,
-        borderRadius: 15,
-        padding: 20,
-        elevation: 5,
-    },
-    modalContentDark: {
-        backgroundColor: '#2c2c2e',
-    },
-    title: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 20,
-        color: '#333',
-    },
-    titleDark: {
-        color: '#fff',
-    },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 15,
-        fontSize: 16,
-    },
-    inputDark: {
-        borderColor: '#666',
-        color: '#fff',
-        backgroundColor: '#1c1c1e',
-    },
-    descriptionInput: {
-        height: 100,
-        textAlignVertical: 'top',
-    },
-    fileButton: {
-        backgroundColor: '#f0f0f0',
-        padding: 15,
-        borderRadius: 8,
-        marginBottom: 20,
-    },
-    fileButtonText: {
-        textAlign: 'center',
-        color: '#666',
-    },
-    buttonContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    button: {
-        flex: 1,
-        padding: 15,
-        borderRadius: 8,
-        marginHorizontal: 5,
-    },
-    uploadButton: {
-        backgroundColor: Colors.PRIMARY,
-    },
-    cancelButton: {
-        backgroundColor: '#666',
-    },
-    buttonText: {
-        color: Colors.white,
-        textAlign: 'center',
-        fontWeight: 'bold',
-    },
-    disabledButton: {
-        opacity: 0.5,
-    },
-    loader: {
-        marginTop: 20,
-    },
-    pickerContainer: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 8,
-        marginBottom: 15,
-        backgroundColor: '#fff',
-    },
-    pickerContainerDark: {
-        borderColor: '#666',
-        backgroundColor: '#1c1c1e',
-    },
-    picker: {
-        height: 50,
-    },
-    pickerDark: {
-        color: '#fff',
-    },
-}); 
+    modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+    modalContent: { width: '90%', backgroundColor: Colors.white, borderRadius: 15, padding: 20 },
+    title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
+    input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 15 },
+    uploadButton: { backgroundColor: Colors.PRIMARY, padding: 15, borderRadius: 8 },
+    buttonText: { textAlign: 'center', fontWeight: 'bold', color: '#fff' },
+});

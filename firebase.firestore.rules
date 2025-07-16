@@ -1,0 +1,57 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ✅ Publicly Readable Materials
+    match /materials/{documentId} {
+      allow read: if true; // Publicly readable
+      allow create: if request.auth != null; // Only authenticated users can upload materials
+      allow update, delete: if request.auth != null && 
+        (request.auth.uid == resource.data.uploadedBy || request.auth.token.admin == true); // Only uploader or admin
+    }
+
+    // ✅ Users Collection (Users can only manage their own profile)
+  match /users/{userId} {
+  allow read, update: if request.auth != null && 
+    (request.auth.uid == userId || request.auth.token.admin == true); // Allow admins to update any user
+  allow delete: if request.auth != null && 
+    (request.auth.uid == userId || request.auth.token.admin == true); // Allow admins to delete any user
+  allow create: if request.auth != null; // Any authenticated user can create a profile
+}
+    // ✅ Ratings Collection (Users can only modify their own ratings)
+    match /subjects/{subjectId}/ratings/{ratingId} {
+      allow read: if true; // Anyone can read ratings
+      allow create: if request.auth != null; // Any logged-in user can rate
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+
+    // ✅ Wishlist Collection (Users can only manage their own wishlist)
+    match /users/{userId}/wishlist/{wishlistId} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ✅ Material Requests (Uploader or Admin can modify requests)
+    match /materialRequests/{documentId} {
+      allow read: if true; // Anyone can read material requests
+      allow create: if request.auth != null; // Only authenticated users can request materials
+      allow update, delete: if request.auth != null && 
+        (request.auth.uid == resource.data.uploadedBy || request.auth.token.admin == true);
+    }
+
+    // ✅ Subject Materials (Only uploader or admin can modify materials)
+    match /subjects/{subjectId}/materials/{materialId} {
+      allow read: if true; // Everyone can read
+      allow create: if request.auth != null; // Only authenticated users can upload materials
+      allow update, delete: if request.auth != null &&
+        (request.auth.uid == resource.data.uploadedBy || request.auth.token.admin == true);
+    }
+
+    // ✅ Default Catch-All Rule (Ensures security)
+    match /{document=**} {
+      allow read: if true; // Public read access
+      allow write: if request.auth != null; // Only authenticated users can write
+    }
+  }
+}
+

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'expo-router';
 import Colors from './../../constant/Colors';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { Picker } from '@react-native-picker/picker';
 
@@ -55,7 +55,8 @@ export default function SignUp() {
 
     const SaveUser = async (user) => {
         try {
-            await setDoc(doc(db, 'users', user.email), {
+            const userRef = doc(db, 'users', user.email);
+            await setDoc(userRef, {
                 name: fullName,
                 email: email,
                 member: false,
@@ -64,12 +65,13 @@ export default function SignUp() {
                 semester: semester,
                 year: year,
                 studentid: studentid,
-                createdAt: new Date().toISOString()
-            });
+                createdAt: serverTimestamp(),
+                isAdmin: false // explicitly set non-admin status
+            }, { merge: true }); // use merge to avoid overwriting existing data
             console.log("User data saved successfully!");
         } catch (error) {
             console.error("Error saving user data:", error);
-            alert("Error saving user data. Please try again.");
+            throw error; // propagate error to handle it in the calling function
         }
     }
 

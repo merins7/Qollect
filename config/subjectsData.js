@@ -1,5 +1,6 @@
 export const IT_SUBJECTS = {
-    '1': [
+    "2019":{
+        '1': [
         { id: '1', name: 'Calculus' },
         { id: '2', name: 'Engineering Physics' },
         { id: '3', name: 'Engineering Mechanics' },
@@ -67,10 +68,7 @@ export const IT_SUBJECTS = {
         { id: '3', name: 'Deep Learning' },
         { id: '4', name: 'Cloud Computing' },
         { id: '5', name: 'Android Programming' },
-        { 
-            id: '6', 
-            name: 'Recommender System',
-        },
+        { id: '6', name: 'Recommender System' },
         { id: '7', name: 'Cloud and Data Analytics Laboratory' },
         { id: '8', name: 'Mini Project – Android Based' }
     ],
@@ -121,11 +119,85 @@ export const IT_SUBJECTS = {
         { id: '5', name: 'Seminar' },
         { id: '6', name: 'Project Phase II' },
         { id: '7', name: 'Comprehensive Viva Voce' }
-    ]
+    ]},
+    '2023': {
+        '1': [
+            { id: '1', name: 'Mathematics I' },
+            { id: '2', name: 'Physics I' },
+            { id: '3', name: 'Chemistry' },
+            { id: '4', name: 'Computer Programming' },
+            { id: '5', name: 'Engineering Mechanics' },
+            { id: '6', name: 'Communication Skills' },
+            { id: '7', name: 'Environmental Science' },
+        ],
+        '2': [
+            { id: '1', name: 'Mathematics II' },
+            { id: '2', name: 'Physics II' },
+            { id: '3', name: 'Data Structures' },
+            { id: '4', name: 'Digital Logic Design' },
+            { id: '5', name: 'Electrical Engineering' },
+            { id: '6', name: 'Engineering Graphics' },
+            { id: '7', name: 'Professional Ethics in Engineering' },
+        ],
+        '3': [
+            { id: '1', name: 'Mathematics III' },
+            { id: '2', name: 'Computer Organization and Architecture' },
+            { id: '3', name: 'Object-Oriented Programming with C++' },
+            { id: '4', name: 'Database Management Systems' },
+            { id: '5', name: 'Software Engineering Principles' },
+            { id: '6', name: 'Operating Systems' },
+            { id: '7', name: 'Discrete Mathematics and Graph Theory' },
+        ],
+        '4': [
+            { id: '1', name: 'Mathematics IV' },
+            { id: '2', name: 'Design and Analysis of Algorithms' },
+            { id: '3', name: 'Computer Networks' },
+            { id: '4', name: 'Web Technologies' },
+            { id: '5', name: 'Theory of Computation' },
+            { id: '6', name: 'Microprocessors and Microcontrollers' },
+            { id: '7', name: 'Human-Computer Interaction' },
+        ],
+        '5': [
+            { id: '1', name: 'Software Project Management' },
+            { id: '2', name: 'Mobile Application Development' },
+            { id: '3', name: 'Cloud Computing and Virtualization' },
+            { id: '4', name: 'Information Security and Cyber Laws' },
+            { id: '5', name: 'Artificial Intelligence and Machine Learning' },
+            { id: '6', name: 'Data Mining and Data Warehousing' },
+            { id: '7', name: 'Elective I' },
+        ],
+        '6': [
+            { id: '1', name: 'Big Data Analytics' },
+            { id: '2', name: 'Distributed Systems and Cloud Computing' },
+            { id: '3', name: 'Compiler Design and Construction' },
+            { id: '4', name: 'Web Services and Service-Oriented Architecture' },
+            { id: '5', name: 'Elective II' },
+            { id: '6', name: 'Elective III' },
+            { id: '7', name: 'Open Elective I' },
+        ],
+        '7': [
+            { id: '1', name: 'Software Testing and Quality Assurance' },
+            { id: '2', name: 'Network Security and Cryptography' },
+            { id: '3', name: 'Advanced Database Management Systems' },
+            { id: '4', name: 'Elective IV' },
+            { id: '5', name: 'Elective V' },
+            { id: '6', name: 'Open Elective II' },
+            { id: '7', name: 'Project Phase I' },
+        ],
+        '8': [
+            { id: '1', name: 'Professional Elective IV' },
+            { id: '2', name: 'Professional Elective V' },
+            { id: '3', name: 'Professional Elective VI' },
+            { id: '4', name: 'Open Elective III' },
+            { id: '5', name: 'Seminar on Current Trends in IT' },
+            { id: '6', name: 'Project Phase II' },
+            { id: '7', name: 'Comprehensive Viva Voce' },
+        ],
+    }
 };
 
 export const MATERIAL_TYPES = [
     { id: 'notes', name: 'Notes', icon: 'book-outline' },
     { id: 'pyq', name: 'Previous Year Questions', icon: 'document-text-outline' },
-    { id: 'syllabus', name: 'Syllabus', icon: 'list-outline' }
-]; 
+    { id: 'syllabus', name: 'Syllabus', icon: 'list-outline' },
+];

@@ -1,47 +1,58 @@
-import { View, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
-import React, { useState } from 'react';
+import { View, StyleSheet, SafeAreaView, Text } from 'react-native';
+import React, { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Colors from '../../constant/Colors';
+import Header from '../components/Header';
 import SubjectList from '../components/SubjectList';
-import UploadForm from '../components/UploadForm';
-import { Ionicons } from '@expo/vector-icons';
+import { IT_SUBJECTS } from '../../config/subjectsData';
 
 export default function SemesterDetail() {
-    const { id } = useLocalSearchParams();
+    const { id, scheme } = useLocalSearchParams(); // ✅ Get URL params
     const router = useRouter();
-    const [isUploadFormVisible, setIsUploadFormVisible] = useState(false);
+    const [subjects, setSubjects] = useState([]);
+
+    useEffect(() => {
+        if (!id || !scheme) return;
+
+        console.log("📌 Semester ID:", id);  
+        console.log("📌 Scheme:", scheme);  
+        console.log("📌 Available Schemes in IT_SUBJECTS:", Object.keys(IT_SUBJECTS)); // Debugging
+        console.log("📌 Available Semesters for Scheme:", IT_SUBJECTS[scheme] ? Object.keys(IT_SUBJECTS[scheme]) : "Not Found");
+
+        const schemeSubjects = IT_SUBJECTS[scheme] || {};  
+        const semesterSubjects = schemeSubjects[id] || [];
+
+        console.log("📌 Subjects for Semester", id, "under Scheme", scheme, ":", semesterSubjects); // Debugging
+
+        setSubjects(semesterSubjects);
+    }, [id, scheme]);
 
     const handleSubjectSelect = (subject) => {
         router.push({
-            pathname: '/semester/subject/[id]',
+            pathname: `/semester/subject/${subject.id}`,
             params: { 
                 id: subject.id,
                 semester: id,
-                subjectName: subject.name
+                subjectName: subject.name,
+                scheme,
             }
         });
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            <SubjectList 
-                semester={id} 
-                onSelectSubject={handleSubjectSelect}
-            />
-            
-            {/* Upload Button */}
-            <TouchableOpacity 
-                style={styles.uploadButton}
-                onPress={() => setIsUploadFormVisible(true)}
-            >
-                <Ionicons name="cloud-upload" size={24} color={Colors.white} />
-            </TouchableOpacity>
-
-            <UploadForm 
-                visible={isUploadFormVisible}
-                onClose={() => setIsUploadFormVisible(false)}
-                semester={id}
-            />
+            <Header title={`Semester ${id} (${scheme} Scheme)`} showBack={true} />
+            {subjects.length > 0 ? (
+                <SubjectList 
+                    subjects={subjects} 
+                    onSelectSubject={handleSubjectSelect}
+                />
+            ) : (
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>
+                        ⚠️ No subjects available for this scheme.
+                    </Text>
+                </View>
+            )}
         </SafeAreaView>
     );
 }
@@ -51,23 +62,13 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#f5f5f5',
     },
-    uploadButton: {
-        position: 'absolute',
-        bottom: 20,
-        right: 20,
-        backgroundColor: Colors.PRIMARY,
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        justifyContent: 'center',
+    emptyContainer: {
+        flex: 1,
         alignItems: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        justifyContent: 'center',
     },
-}); 
+    emptyText: {
+        fontSize: 16,
+        color: '#666',
+    },
+});

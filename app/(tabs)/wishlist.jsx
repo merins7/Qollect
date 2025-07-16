@@ -1,83 +1,90 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import React, { useState, useEffect } from 'react';
-import { Header } from '../components/Header';
-import Colors from '../../constant/Colors';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { collection, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { db, auth } from '../../config/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
-import { useRouter } from 'expo-router';
+import Header from '../components/Header';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 
 export default function WishlistScreen() {
-    const [wishlistItems, setWishlistItems] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const router = useRouter();
     const { isDarkMode } = useTheme();
+    const [wishlist, setWishlist] = useState([]);
+    const userId = auth.currentUser?.uid;
 
     useEffect(() => {
-        fetchWishlist();
-    }, []);
+        if (!userId) return;
 
-    const fetchWishlist = async () => {
+        // ✅ Real-time listener for wishlist updates
+        const wishlistRef = collection(db, `users/${userId}/wishlist`);
+        const unsubscribe = onSnapshot(wishlistRef, (snapshot) => {
+            const updatedWishlist = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setWishlist(updatedWishlist);
+        });
+
+        // Cleanup the listener when component unmounts
+        return () => unsubscribe();
+    }, [userId]);
+
+    const removeFromWishlist = async (item) => {
         try {
-            const userDoc = await getDoc(doc(db, 'users', auth.currentUser.email));
-            const wishlist = userDoc.data()?.wishlist || [];
-            
-            // Fetch details for each wishlisted item
-            const items = await Promise.all(
-                wishlist.map(async (id) => {
-                    const materialDoc = await getDoc(doc(db, 'materials', id));
-                    return { id, ...materialDoc.data() };
-                })
-            );
-            
-            setWishlistItems(items);
+            await deleteDoc(doc(db, `users/${userId}/wishlist`, item.id));
+            Alert.alert("Removed", "Item removed from wishlist.");
         } catch (error) {
-            console.error('Error fetching wishlist:', error);
-        } finally {
-            setLoading(false);
+            console.error("Error removing from wishlist:", error);
+            Alert.alert("Error", "Failed to remove item.");
         }
     };
 
-    const renderItem = ({ item }) => (
-        <TouchableOpacity 
-            style={[
-                styles.itemCard,
-                isDarkMode && { backgroundColor: '#333' }
-            ]}
-            onPress={() => router.push(`/material/${item.id}`)}
-        >
-            <View style={styles.itemInfo}>
-                <Text style={[
-                    styles.itemName,
-                    isDarkMode && { color: '#fff' }
-                ]}>{item.name}</Text>
-                <Text style={styles.itemSubject}>{item.subject}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-        </TouchableOpacity>
-    );
+    const openFile = async (fileUrl) => {
+        if (!fileUrl) return Alert.alert('Error', 'File URL not available');
+        await Linking.openURL(fileUrl);
+    };
 
     return (
-        <View style={[
-            styles.container,
-            isDarkMode && { backgroundColor: '#1a1a1a' }
-        ]}>
-            <Header title="My Wishlist" />
-            {wishlistItems.length === 0 ? (
+        <View style={[styles.container, isDarkMode && styles.containerDark]}>
+            <Header title="Wishlist" showBack={false} />
+            
+            {wishlist.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                    <Ionicons name="heart-outline" size={64} color={Colors.PRIMARY} />
-                    <Text style={[
-                        styles.emptyText,
-                        isDarkMode && { color: '#fff' }
-                    ]}>Your wishlist is empty</Text>
+                    <Ionicons name="heart-dislike-outline" size={50} color="#888" />
+                    <Text style={styles.emptyText}>Your wishlist is empty</Text>
                 </View>
             ) : (
                 <FlatList
-                    data={wishlistItems}
-                    renderItem={renderItem}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={styles.list}
+                    data={wishlist}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                        <View style={[styles.item, isDarkMode && styles.itemDark]}>
+                            <View style={styles.itemInfo}>
+                                <Text style={[styles.title, isDarkMode && styles.textDark]}>{item.title}</Text>
+                                <Text style={[styles.subtitle, isDarkMode && styles.textDark]}>
+                                    📖 Subject: {item.subject || item.subjectName || "Unknown"}
+                                </Text>
+                            </View>
+                            <View style={styles.actions}>
+                                {/* ✅ View Button */}
+                                <TouchableOpacity 
+                                    style={styles.viewButton} 
+                                    onPress={() => openFile(item.fileUrl)}
+                                >
+                                    <Ionicons name="eye-outline" size={22} color="#fff" />
+                                    <Text style={styles.buttonText}>View</Text>
+                                </TouchableOpacity>
+
+                                {/* 🗑️ Delete Button */}
+                                <TouchableOpacity 
+                                    style={styles.deleteButton} 
+                                    onPress={() => removeFromWishlist(item)}
+                                >
+                                    <Ionicons name="trash-outline" size={22} color="#fff" />
+                                    <Text style={styles.buttonText}>Delete</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
                 />
             )}
         </View>
@@ -85,48 +92,46 @@ export default function WishlistScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f5f5f5',
+    container: { flex: 1, backgroundColor: '#f5f5f5' },
+    containerDark: { backgroundColor: '#1a1a1a' },
+    item: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: 15, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#ddd' 
     },
-    list: {
-        padding: 15,
+    itemDark: { borderBottomColor: '#444' },
+    itemInfo: { flex: 1 },
+    title: { fontSize: 16, fontWeight: 'bold' },
+    subtitle: { fontSize: 14, color: '#666' },
+    textDark: { color: '#fff' },
+    actions: {
+        flexDirection: 'row',
+        gap: 10,
     },
-    itemCard: {
+    viewButton: {
+        backgroundColor: '#4CAF50', // Green for View
+        padding: 10,
+        borderRadius: 5,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: Colors.white,
-        padding: 15,
-        borderRadius: 10,
-        marginBottom: 10,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.22,
-        shadowRadius: 2.22,
+        gap: 5,
     },
-    itemInfo: {
-        flex: 1,
-    },
-    itemName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    itemSubject: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 4,
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
+    deleteButton: {
+        backgroundColor: '#ff4444', // Red for Delete
+        padding: 10,
+        borderRadius: 5,
+        flexDirection: 'row',
         alignItems: 'center',
-        padding: 20,
+        gap: 5,
     },
-    emptyText: {
-        fontSize: 18,
-        color: '#666',
-        marginTop: 10,
+    buttonText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
     },
-}); 
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    emptyText: { fontSize: 18, color: '#666', marginTop: 10 },
+});

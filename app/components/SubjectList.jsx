@@ -1,35 +1,35 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constant/Colors';
-import { IT_SUBJECTS } from '../../config/subjectsData';
 
-export default function SubjectList({ semester, onSelectSubject }) {
-    const subjects = IT_SUBJECTS[semester] || [];
-
+const SubjectList = ({ subjects, onSelectSubject }) => {
     return (
         <ScrollView style={styles.container}>
-            {subjects.map((subject) => (
-                <TouchableOpacity
-                    key={subject.id}
-                    style={styles.subjectCard}
-                    onPress={() => onSelectSubject(subject)}
-                >
-                    <View style={styles.iconContainer}>
-                        <Ionicons name="book" size={32} color={Colors.PRIMARY} />
-                    </View>
-                    <View style={styles.textContainer}>
-                        <Text style={styles.subjectName}>{subject.name}</Text>
-                        {subject.code && (
-                            <Text style={styles.subjectCode}>{subject.code}</Text>
-                        )}
-                    </View>
-                    <Ionicons name="chevron-forward" size={24} color="#666" />
-                </TouchableOpacity>
-            ))}
+            {subjects.length > 0 ? (
+                subjects.map((subject) => (
+                    <TouchableOpacity
+                        key={subject.id}
+                        style={styles.subjectCard}
+                        onPress={() => onSelectSubject(subject)}
+                    >
+                        <View style={styles.iconContainer}>
+                            <Ionicons name="book" size={32} color={Colors.PRIMARY} />
+                        </View>
+                        <View style={styles.textContainer}>
+                            <Text style={styles.subjectName}>{subject.name}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={24} color="#666" />
+                    </TouchableOpacity>
+                ))
+            ) : (
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No subjects found for this scheme and semester.</Text>
+                </View>
+            )}
         </ScrollView>
     );
-}
+};
 
 const styles = StyleSheet.create({
     container: {
@@ -45,10 +45,7 @@ const styles = StyleSheet.create({
         marginBottom: 15,
         elevation: 2,
         shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 1,
-        },
+        shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.22,
         shadowRadius: 2.22,
     },
@@ -69,9 +66,16 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#333',
     },
-    subjectCode: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 2,
+    emptyContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 50,
     },
-}); 
+    emptyText: {
+        fontSize: 16,
+        color: '#666',
+    },
+});
+
+export default SubjectList; // ✅ Ensure default export

@@ -4,8 +4,11 @@ import { useRouter } from 'expo-router';
 import Colors from './../../constant/Colors';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../config/firebaseConfig';
-import { getDoc, doc } from 'firebase/firestore';
+import { getDoc, doc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebaseConfig';
+
+// Add admin email constant
+const ADMIN_EMAIL = 'zuck@gmail.com';
 
 export default function SignIn() {
     const router = useRouter();
@@ -20,40 +23,34 @@ export default function SignIn() {
         }
 
         try {
-            // Check if trying to sign in as admin
-            if (isAdmin) {
-                if (email !== 'zuck@gmail.com') {
-                    alert('Invalid admin credentials');
-                    return;
-                }
-            } else {
-                // If trying to sign in as user, check if it's not the admin email
-                if (email === 'zuck@gmail.com') {
-                    alert('Please use admin login for admin account');
-                    return;
-                }
+            // Sign in
+            await signInWithEmailAndPassword(auth, email, password);
+            
+            // Get user document
+            const userRef = doc(db, 'users', email);
+            const userDoc = await getDoc(userRef);
+
+            // Create or update user document
+            if (!userDoc.exists()) {
+                await setDoc(userRef, {
+                    email,
+                    isAdmin: email === ADMIN_EMAIL,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                    role: email === ADMIN_EMAIL ? 'admin' : 'user'
+                });
             }
 
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            
-            // After successful sign in, verify user type
-            const userDoc = await getDoc(doc(db, 'users', email));
-            const userData = userDoc.data();
-
-            if (isAdmin && !userData?.isAdmin) {
+            // Check admin status if trying to sign in as admin
+            if (isAdmin && (!userDoc.exists() || !userDoc.data().isAdmin)) {
                 await auth.signOut();
                 alert('This account does not have admin privileges');
                 return;
             }
 
-            if (!isAdmin && userData?.isAdmin) {
-                await auth.signOut();
-                alert('Please use admin login for admin account');
-                return;
-            }
-
             router.replace('/(tabs)');
         } catch (error) {
+            console.error('Sign in error:', error);
             alert(error.message);
         }
     };

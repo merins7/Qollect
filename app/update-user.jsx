@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebaseConfig';
+import Header from './components/Header'; // Ensure the path and export are correct
 import Colors from '../constant/Colors';
-import { Header } from './components/Header';
 
 export default function UpdateUser() {
     const { email } = useLocalSearchParams();
@@ -131,4 +131,4 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
-}); 
+});

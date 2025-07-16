@@ -1,24 +1,25 @@
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import React, { useState } from 'react';
-import Header from '../components/Header';
-import SemesterGrid from '../components/SemesterGrid';
+import Colors from '../../constant/Colors';
 import { useTheme } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '../../constant/Colors';
 import UploadForm from '../components/UploadForm';
+import SemesterGrid from '../components/SemesterGrid';
 
-export default function HomeScreen() {
+export default function Index() {
     const { isDarkMode } = useTheme();
     const [isUploadFormVisible, setIsUploadFormVisible] = useState(false);
 
     return (
-        <View style={[
-            styles.container,
-            isDarkMode && { backgroundColor: '#1a1a1a' }
-        ]}>
-            <Header title="Qollect" />
-            <SemesterGrid />
-            
+        <View style={[styles.container, isDarkMode && styles.containerDark]}>
+            <ScrollView 
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+            >
+                {/* Semester Grid */}
+                <SemesterGrid />
+            </ScrollView>
+
             {/* Upload Button */}
             <TouchableOpacity 
                 style={styles.uploadButton}
@@ -27,6 +28,7 @@ export default function HomeScreen() {
                 <Ionicons name="cloud-upload" size={24} color={Colors.white} />
             </TouchableOpacity>
 
+            {/* Upload Form Modal */}
             <UploadForm 
                 visible={isUploadFormVisible}
                 onClose={() => setIsUploadFormVisible(false)}
@@ -39,6 +41,13 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
+    },
+    containerDark: {
+        backgroundColor: '#1a1a1a',
+    },
+    scrollContent: {
+        flexGrow: 1,
+        paddingBottom: 80, // Add padding for upload button
     },
     uploadButton: {
         position: 'absolute',
@@ -58,5 +67,5 @@ const styles = StyleSheet.create({
         },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-    },
+    }
 }); 

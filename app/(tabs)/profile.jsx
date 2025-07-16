@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert, ActivityIndicator, FlatList, SafeAreaView } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import { auth, db, storage } from '../../config/firebaseConfig';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { signOut } from 'firebase/auth';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function ProfileScreen() {
     const router = useRouter();
@@ -15,6 +16,7 @@ export default function ProfileScreen() {
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [users, setUsers] = useState([]); // For admin view
+    const { isDarkMode } = useTheme();
 
     useEffect(() => {
         let mounted = true;
@@ -53,15 +55,23 @@ export default function ProfileScreen() {
 
     const fetchAllUsers = async () => {
         try {
-            const usersQuery = query(collection(db, 'users'), where('isAdmin', '==', false));
+            setLoading(true);
+            const usersQuery = query(
+                collection(db, 'users'), 
+                where('isAdmin', '==', false)
+            );
             const querySnapshot = await getDocs(usersQuery);
             const usersList = querySnapshot.docs.map(doc => ({
                 id: doc.id,
+                email: doc.data().email,
                 ...doc.data()
             }));
             setUsers(usersList);
         } catch (error) {
             console.error('Error fetching users:', error);
+            Alert.alert('Error', 'Failed to fetch users');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -76,19 +86,37 @@ export default function ProfileScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await deleteDoc(doc(db, 'users', userEmail));
-                            // Delete profile image if exists
-                            const imageRef = ref(storage, `profileImages/${userEmail}`);
+                            setLoading(true);
+                            // Delete user document
+                            const userRef = doc(db, 'users', userEmail);
+                            await deleteDoc(userRef);
+
+                            // Delete profile image
                             try {
+                                const imageRef = ref(storage, `profileImages/${userEmail}`);
                                 await deleteObject(imageRef);
                             } catch (error) {
                                 // Ignore if image doesn't exist
+                                console.log('No profile image to delete');
                             }
-                            fetchAllUsers();
-                            Alert.alert('Success', 'User deleted successfully');
+
+                            // Delete user's materials
+                            const materialsQuery = query(
+                                collection(db, 'materials'),
+                                where('uploadedBy', '==', userEmail)
+                            );
+                            const materialsSnapshot = await getDocs(materialsQuery);
+                            const deletePromises = materialsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+                            await Promise.all(deletePromises);
+
+                            // Update local state
+                            setUsers(prevUsers => prevUsers.filter(user => user.email !== userEmail));
+                            Alert.alert('Success', 'User and associated data deleted successfully');
                         } catch (error) {
                             console.error('Error deleting user:', error);
                             Alert.alert('Error', 'Failed to delete user');
+                        } finally {
+                            setLoading(false);
                         }
                     }
                 }
@@ -203,7 +231,7 @@ export default function ProfileScreen() {
                     onPress: async () => {
                         try {
                             await signOut(auth);
-                            router.replace('/');
+                            router.replace('/auth/signIn');
                         } catch (error) {
                             console.error('Error signing out:', error);
                             Alert.alert('Error', 'Failed to sign out');
@@ -215,28 +243,51 @@ export default function ProfileScreen() {
         );
     };
 
-    const renderUserItem = (user) => (
-        <View key={user.id} style={styles.userItem}>
-            <View style={styles.userInfo}>
-                <Text style={styles.userName}>{user.name}</Text>
-                <Text style={styles.userEmail}>{user.email}</Text>
+    const renderUserItem = ({ item }) => {
+        if (!item?.email) return null;
+
+        return (
+            <View style={[
+                styles.userItem,
+                isDarkMode && styles.userItemDark
+            ]}>
+                <View style={styles.userInfo}>
+                    <Text style={[styles.userName, isDarkMode && styles.userNameDark]}>
+                        {item.name || 'Unnamed User'}
+                    </Text>
+                    <Text style={[styles.userEmail, isDarkMode && styles.userEmailDark]}>
+                        {item.email}
+                    </Text>
+                    <View style={styles.userDetailsContainer}>
+                        <Text style={[styles.userDetails, isDarkMode && styles.userDetailsDark]}>
+                            Branch: {item.branch || 'N/A'}
+                        </Text>
+                        <Text style={[styles.userDetails, isDarkMode && styles.userDetailsDark]}>
+                            Semester: {item.semester || 'N/A'}
+                        </Text>
+                    </View>
+                </View>
+                <View style={styles.userActions}>
+                    <TouchableOpacity 
+                        onPress={() => handleUpdateUser(item.email)}
+                        style={[styles.actionButton, isDarkMode && styles.actionButtonDark]}
+                    >
+                        <Ionicons 
+                            name="create-outline" 
+                            size={22} 
+                            color={isDarkMode ? Colors.PRIMARY : '#fff'} 
+                        />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        onPress={() => handleDeleteUser(item.email)}
+                        style={[styles.actionButton, styles.deleteButton]}
+                    >
+                        <Ionicons name="trash-outline" size={22} color="#fff" />
+                    </TouchableOpacity>
+                </View>
             </View>
-            <View style={styles.userActions}>
-                <TouchableOpacity 
-                    onPress={() => handleUpdateUser(user.email)}
-                    style={styles.actionButton}
-                >
-                    <Ionicons name="create" size={24} color={Colors.PRIMARY} />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                    onPress={() => handleDeleteUser(user.email)}
-                    style={[styles.actionButton, styles.deleteButton]}
-                >
-                    <Ionicons name="trash" size={24} color="#ff4444" />
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
+        );
+    };
 
     if (loading) {
         return (
@@ -246,8 +297,8 @@ export default function ProfileScreen() {
         );
     }
 
-    return (
-        <ScrollView style={styles.container}>
+    const renderHeader = () => (
+        <>
             <View style={styles.header}>
                 <TouchableOpacity 
                     style={styles.avatarContainer} 
@@ -269,12 +320,7 @@ export default function ProfileScreen() {
                 <Text style={styles.role}>{userData?.isAdmin ? 'Administrator' : 'Student'}</Text>
             </View>
 
-            {userData?.isAdmin ? (
-                <View style={styles.adminSection}>
-                    <Text style={styles.sectionTitle}>Manage Users</Text>
-                    {users.map(renderUserItem)}
-                </View>
-            ) : (
+            {!userData?.isAdmin && (
                 <View style={styles.infoSection}>
                     <ProfileItem icon="mail" label="Email" value={user?.email} />
                     <ProfileItem icon="school" label="Branch" value={userData?.branch} />
@@ -283,8 +329,26 @@ export default function ProfileScreen() {
                     <ProfileItem icon="card" label="Student ID" value={userData?.studentid} />
                 </View>
             )}
+        </>
+    );
 
-            {/* Sign Out Button */}
+    const renderFooter = () => (
+        <>
+            {userData?.isAdmin && (
+                <TouchableOpacity
+                    style={[styles.menuItem, isDarkMode && styles.menuItemDark]}
+                    onPress={() => router.push('/admin/MaterialApprovals')}
+                >
+                    <View style={styles.menuItemContent}>
+                        <Ionicons name="checkmark-circle" size={24} color={Colors.PRIMARY} />
+                        <Text style={[styles.menuItemText, isDarkMode && styles.menuItemTextDark]}>
+                            Material Approvals
+                        </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={24} color="#666" />
+                </TouchableOpacity>
+            )}
+
             <TouchableOpacity 
                 style={styles.signOutButton}
                 onPress={handleSignOut}
@@ -292,7 +356,51 @@ export default function ProfileScreen() {
                 <Ionicons name="log-out-outline" size={24} color={Colors.white} />
                 <Text style={styles.signOutText}>Sign Out</Text>
             </TouchableOpacity>
-        </ScrollView>
+        </>
+    );
+
+    return (
+        <SafeAreaView style={[styles.container, isDarkMode && styles.containerDark]}>
+            {userData?.isAdmin ? (
+                <FlatList
+                    data={users}
+                    renderItem={renderUserItem}
+                    keyExtractor={item => item.email}
+                    ListHeaderComponent={renderHeader}
+                    ListHeaderComponentStyle={styles.headerComponent}
+                    ListFooterComponent={renderFooter}
+                    ListFooterComponentStyle={styles.footerComponent}
+                    contentContainerStyle={[
+                        styles.flatListContent,
+                        users.length === 0 && styles.emptyListContent
+                    ]}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={() => (
+                        <View style={styles.emptyContainer}>
+                            <Ionicons 
+                                name="people-outline" 
+                                size={50} 
+                                color={isDarkMode ? '#666' : '#999'} 
+                            />
+                            <Text style={[styles.emptyText, isDarkMode && styles.emptyTextDark]}>
+                                No users found
+                            </Text>
+                        </View>
+                    )}
+                    refreshing={loading}
+                    onRefresh={fetchAllUsers}
+                />
+            ) : (
+                <FlatList
+                    data={[]} // Empty data for non-admin users
+                    renderItem={null}
+                    ListHeaderComponent={renderHeader}
+                    ListFooterComponent={renderFooter}
+                    contentContainerStyle={styles.flatListContent}
+                    showsVerticalScrollIndicator={false}
+                />
+            )}
+        </SafeAreaView>
     );
 }
 
@@ -310,6 +418,19 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
+    },
+    containerDark: {
+        backgroundColor: '#1a1a1a',
+    },
+    flatListContent: {
+        flexGrow: 1,
+        paddingBottom: 20,
+    },
+    headerComponent: {
+        marginBottom: 15,
+    },
+    footerComponent: {
+        marginTop: 15,
     },
     header: {
         backgroundColor: Colors.white,
@@ -409,43 +530,112 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#fff',
     },
-    adminSection: {
-        backgroundColor: Colors.white,
-        margin: 15,
-        padding: 15,
-        borderRadius: 15,
-        elevation: 2,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginBottom: 15,
-        color: '#333',
-    },
     userItem: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 15,
+        marginBottom: 10,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    userItemDark: {
+        backgroundColor: '#333',
     },
     userInfo: {
         flex: 1,
     },
     userName: {
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
         color: '#333',
+        marginBottom: 2,
+    },
+    userNameDark: {
+        color: '#fff',
     },
     userEmail: {
         fontSize: 14,
         color: '#666',
+        marginBottom: 2,
+    },
+    userEmailDark: {
+        color: '#999',
+    },
+    userDetailsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 4,
+    },
+    userDetails: {
+        fontSize: 12,
+        color: '#888',
+    },
+    userDetailsDark: {
+        color: '#777',
     },
     userActions: {
         flexDirection: 'row',
-        gap: 10,
+        gap: 8,
+    },
+    actionButton: {
+        backgroundColor: Colors.PRIMARY,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    actionButtonDark: {
+        backgroundColor: '#444',
     },
     deleteButton: {
+        backgroundColor: '#ff4444',
+    },
+    menuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    menuItemDark: {
+        borderBottomColor: '#2c2c2e',
+    },
+    menuItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    menuItemText: {
+        fontSize: 16,
+        color: '#333',
         marginLeft: 10,
+    },
+    menuItemTextDark: {
+        color: '#fff',
+    },
+    emptyListContent: {
+        flexGrow: 1,
+        justifyContent: 'center',
+    },
+    emptyContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    emptyText: {
+        fontSize: 16,
+        color: '#666',
+        marginTop: 10,
+        textAlign: 'center',
+    },
+    emptyTextDark: {
+        color: '#999',
     },
 }); 

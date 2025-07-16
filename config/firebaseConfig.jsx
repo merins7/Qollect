@@ -1,9 +1,9 @@
 // Import the necessary functions from the SDK
 import { initializeApp } from "firebase/app";
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
 import { getFirestore } from "firebase/firestore";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getStorage } from 'firebase/storage';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import { Platform } from 'react-native';
 
 // Your Firebase configuration
@@ -20,17 +20,29 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize Auth with persistence
-const auth = Platform.OS === 'web' 
-  ? getAuth(app)
-  : initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage)
+let auth;
+if (Platform.OS === 'web') {
+    auth = getAuth(app);
+} else {
+    auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage)
     });
+}
 
 // Initialize Firestore
 const db = getFirestore(app);
 
 // Initialize Storage
 const storage = getStorage(app);
+
+// If using emulator (for local development)
+if (__DEV__) {
+  try {
+    connectStorageEmulator(storage, 'localhost', 9199);
+  } catch (error) {
+    console.log('Storage emulator already connected');
+  }
+}
 
 // Log initialization in development
 if (__DEV__) {
